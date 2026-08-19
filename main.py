@@ -279,4 +279,4 @@ if __name__ == '__main__':
     server_port = cfg.getint("PREFERENCES", "Port", fallback=5090)
     
     print(f"[SERVER] Avvio di Flask sulla porta: {server_port}", flush=True)
-    app.run(debug=True, host="0.0.0.0", port=server_port)
+    app.run(debug=True, host="0.0.0.0", port=server_port, threaded=True)

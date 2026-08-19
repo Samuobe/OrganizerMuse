@@ -26,14 +26,14 @@ def _get_base_options(download_mp3=False, output_folder="."):
     if download_mp3:
         opts.update({
             'quiet': False,
-            'format': 'bestaudio/worstvideo+bestaudio/best',
+            'format': 'bestaudio/best',
             'retries': 10,
             'fragment_retries': 10,
             'retry_sleep_functions': {'http': lambda n: 2},
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '320',
+                'preferredquality': '0',  
             }],
             'outtmpl': os.path.join(output_folder, '%(title)s.%(ext)s'),
         })
@@ -95,8 +95,6 @@ def download_by_id(video_id, output_folder="./downloads"):
     with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
-        
-        # Sostituiamo l'estensione originale con .mp3 (creata da FFmpegExtractAudio)
         mp3_path = os.path.splitext(filename)[0] + ".mp3"
         
         abs_path = os.path.abspath(mp3_path)
