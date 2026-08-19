@@ -41,9 +41,11 @@ def get_or_create_case_insensitive_dir(base_path, folder_name):
 def search_album(title=None, artist=None, limit=5):
     query_parts = []
     if title:
-        query_parts.append(f'release:"{title}"')
+        str_title = f'release:"{title}"'
+        query_parts.append(str_title)
     if artist:
-        query_parts.append(f'artist:"{artist}"')
+        str_artist = f'artist:"{artist}"'
+        query_parts.append(str_artist)
 
     if not query_parts:
         return []
@@ -127,9 +129,11 @@ def _extract_all_genres(mb_release):
 
 
 def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, config_path="config.conf"):
-    print(f"\n==========================================", flush=True)
-    print(f"[PROCESS] Inizio elaborazione per: '{track_title}' - '{artist_name}'", flush=True)
-    print(f"[PROCESS] File origine: {mp3_file_path}", flush=True)
+    print("\n==========================================", flush=True)
+    msg_start = f"[PROCESS] Inizio elaborazione per: '{track_title}' - '{artist_name}'"
+    print(msg_start, flush=True)
+    msg_orig = f"[PROCESS] File origine: {mp3_file_path}"
+    print(msg_orig, flush=True)
 
 
     config = configparser.ConfigParser()
@@ -143,7 +147,9 @@ def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, c
         output_format = "opus"
         bitrate = "320k"
 
-    print(f"[CONFIG] Base Path: {base_download_path} | Formato: {output_format.upper()} | Bitrate: {bitrate}", flush=True)
+    fmt_upper = output_format.upper()
+    msg_cfg = f"[CONFIG] Base Path: {base_download_path} | Formato: {fmt_upper} | Bitrate: {bitrate}"
+    print(msg_cfg, flush=True)
 
 
     album_title = ""
@@ -161,7 +167,8 @@ def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, c
     recording_id = ""
 
     try:
-        print(f"[MUSICBRAINZ] Download dati completi per Release ID: {release_id}...", flush=True)
+        msg_mb = f"[MUSICBRAINZ] Download dati completi per Release ID: {release_id}..."
+        print(msg_mb, flush=True)
         
         # RIMOSSO 'user-tags' PER EVITARE RICHIESTA DI LOGIN
         includes = ["recordings", "artist-credits", "tags", "release-groups", "media", "labels"]
@@ -220,10 +227,12 @@ def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, c
             if found_track:
                 break
 
-        print(f"[MUSICBRAINZ] Dati trovati -> Album: '{album_title}' | Anno: '{year}' | Traccia: '{track_number}/{total_tracks}'", flush=True)
+        msg_found = f"[MUSICBRAINZ] Dati trovati -> Album: '{album_title}' | Anno: '{year}' | Traccia: '{track_number}/{total_tracks}'"
+        print(msg_found, flush=True)
 
     except Exception as e:
-        print(f"[ERROR MusicBrainz] Errore recupero metadati: {e}", flush=True)
+        msg_err_mb = f"[ERROR MusicBrainz] Errore recupero metadati: {e}"
+        print(msg_err_mb, flush=True)
 
 
     target_artist_name = artist_name if artist_name else (album_artist if album_artist else "Unknown Artist")
@@ -235,7 +244,8 @@ def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, c
     # Definizione del nome del file finale
     clean_track_title = sanitize_filename(track_title)
     if track_number and track_number.isdigit():
-        file_name = f"{int(track_number):02d} - {clean_track_title}.{output_format}"
+        num_formatted = f"{int(track_number):02d}"
+        file_name = f"{num_formatted} - {clean_track_title}.{output_format}"
     else:
         file_name = f"{clean_track_title}.{output_format}"
 
@@ -244,7 +254,7 @@ def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, c
 
     cover_data = None
     try:
-        print(f"[COVER] Scaricamento copertina...", flush=True)
+        print("[COVER] Scaricamento copertina...", flush=True)
         image_list = musicbrainzngs.get_image_list(release_id)
         if image_list.get('images'):
             front_image = next((img for img in image_list['images'] if img.get('front')), image_list['images'][0])
@@ -253,25 +263,29 @@ def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, c
                 req = urllib.request.Request(cover_url, headers={'User-Agent': 'MyMusicApp/1.0'})
                 with urllib.request.urlopen(req) as response:
                     cover_data = response.read()
-                print(f"[COVER] Copertina scaricata ({len(cover_data)} bytes)", flush=True)
+                msg_cov = f"[COVER] Copertina scaricata ({len(cover_data)} bytes)"
+                print(msg_cov, flush=True)
     except Exception as e:
-        print(f"[WARNING Cover] Impossibile recuperare la copertina: {e}", flush=True)
+        msg_err_cov = f"[WARNING Cover] Impossibile recuperare la copertina: {e}"
+        print(msg_err_cov, flush=True)
 
 
-    print(f"[AUDIO] Conversione e salvataggio in: {final_file_path}", flush=True)
+    msg_conv = f"[AUDIO] Conversione e salvataggio in: {final_file_path}"
+    print(msg_conv, flush=True)
     try:
         audio = AudioSegment.from_file(mp3_file_path)
         if output_format == "flac":
             audio.export(final_file_path, format="flac")
         else:
             audio.export(final_file_path, format=output_format, parameters=["-b:a", bitrate])
-        print(f"[AUDIO] Conversione completata con successo.", flush=True)
+        print("[AUDIO] Conversione completata con successo.", flush=True)
     except Exception as e:
-        print(f"[FATAL Audio] Errore durante la conversione audio: {e}", flush=True)
+        msg_err_aud = f"[FATAL Audio] Errore durante la conversione audio: {e}"
+        print(msg_err_aud, flush=True)
         raise e
 
 
-    print(f"[TAGGING] Scrittura metadati Picard...", flush=True)
+    print("[TAGGING] Scrittura metadati Picard...", flush=True)
     final_artist = target_artist_name
 
     try:
@@ -392,92 +406,17 @@ def process_and_tag_audio(mp3_file_path, track_title, artist_name, release_id, c
 
             f.save()
 
-        print(f"[TAGGING] Scrittura metadati completata.", flush=True)
+        print("[TAGGING] Scrittura metadati completata.", flush=True)
 
     except Exception as e:
-        print(f"[ERROR Tagging] Errore scrittura metadati: {e}", flush=True)
+        msg_err_tag = f"[ERROR Tagging] Errore scrittura metadati: {e}"
+        print(msg_err_tag, flush=True)
         raise e
 
     if os.path.exists(mp3_file_path) and os.path.abspath(mp3_file_path) != os.path.abspath(final_file_path):
         os.remove(mp3_file_path)
-        print(f"[CLEANUP] Rimosso file temporaneo origine: {mp3_file_path}", flush=True)
+        msg_clean = f"[CLEANUP] Rimosso file temporaneo origine: {mp3_file_path}"
+        print(msg_clean, flush=True)
 
-    print(f"==========================================\n", flush=True)
+    print("==========================================\n", flush=True)
     return final_file_path
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -31,7 +31,8 @@ def stream_search():
     search_engine = request.args.get('search_engine')
 
     def generate():
-        yield f"data: {json.dumps({'type': 'status', 'msg': 'Recupero informazioni da MusicBrainz...'})}\n\n"
+        payload_status = json.dumps({'type': 'status', 'msg': 'Recupero informazioni da MusicBrainz...'})
+        yield f"data: {payload_status}\n\n"
         
         tracks = []
         artist_name = ""
@@ -48,14 +49,17 @@ def stream_search():
 
         total_tracks = len(tracks)
         if total_tracks == 0:
-            yield f"data: {json.dumps({'type': 'error', 'msg': 'Nessuna traccia trovata nell\'album.'})}\n\n"
+            payload_err = json.dumps({'type': 'error', 'msg': "Nessuna traccia trovata nell'album."})
+            yield f"data: {payload_err}\n\n"
             return
 
-        yield f"data: {json.dumps({'type': 'init', 'total': total_tracks, 'artist_name': artist_name, 'album_id': album_id})}\n\n"
+        payload_init = json.dumps({'type': 'init', 'total': total_tracks, 'artist_name': artist_name, 'album_id': album_id})
+        yield f"data: {payload_init}\n\n"
 
         for idx, title in enumerate(tracks, 1):
             query = f"{artist_name} {title}".strip()
-            yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total_tracks, 'msg': f'Ricerca YouTube per: {title}'})}\n\n"
+            payload_prog = json.dumps({'type': 'progress', 'current': idx, 'total': total_tracks, 'msg': f'Ricerca YouTube per: {title}'})
+            yield f"data: {payload_prog}\n\n"
             
             candidates = search_videos(query, n=5)
 
@@ -64,11 +68,13 @@ def stream_search():
                 'candidates': candidates
             }
 
-            yield f"data: {json.dumps({'type': 'track', 'index': idx - 1, 'track': track_payload})}\n\n"
+            payload_track = json.dumps({'type': 'track', 'index': idx - 1, 'track': track_payload})
+            yield f"data: {payload_track}\n\n"
             
             time.sleep(0.5)
 
-        yield f"data: {json.dumps({'type': 'complete', 'msg': 'Ricerca completata!'})}\n\n"
+        payload_done = json.dumps({'type': 'complete', 'msg': 'Ricerca completata!'})
+        yield f"data: {payload_done}\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
@@ -90,10 +96,12 @@ def stream_download():
     def generate():
         total_tracks = len(items)
         if total_tracks == 0:
-            yield f"data: {json.dumps({'msg': 'Nessuna traccia selezionata.', 'error': True})}\n\n"
+            payload_empty = json.dumps({'msg': 'Nessuna traccia selezionata.', 'error': True})
+            yield f"data: {payload_empty}\n\n"
             return
 
-        yield f"data: {json.dumps({'msg': 'Avvio download e elaborazione album...', 'progress': 0})}\n\n"
+        payload_start = json.dumps({'msg': 'Avvio download e elaborazione album...', 'progress': 0})
+        yield f"data: {payload_start}\n\n"
 
         config = configparser.ConfigParser()
         config.read('config.conf')
@@ -108,17 +116,20 @@ def stream_download():
             progress = int(((idx - 1) / total_tracks) * 100)
 
             if not video_id:
-                yield f"data: {json.dumps({'msg': f'[{idx}/{total_tracks}] Saltata: {title} (ID mancante)', 'progress': progress})}\n\n"
+                p_sk = json.dumps({'msg': f'[{idx}/{total_tracks}] Saltata: {title} (ID mancante)', 'progress': progress})
+                yield f"data: {p_sk}\n\n"
                 continue
 
-            yield f"data: {json.dumps({'msg': f'[{idx}/{total_tracks}] Scaricamento: {title}...', 'progress': progress})}\n\n"
+            p_dl = json.dumps({'msg': f'[{idx}/{total_tracks}] Scaricamento: {title}...', 'progress': progress})
+            yield f"data: {p_dl}\n\n"
             try:
                 downloaded_mp3_path = download_by_id(video_id, output_folder=temp_dir)
                 print(f"[DEBUG APP] Percorso restituito da download_by_id: {downloaded_mp3_path}", flush=True)
 
                 if downloaded_mp3_path and os.path.exists(downloaded_mp3_path):
                     if album_id:
-                        yield f"data: {json.dumps({'msg': f'[{idx}/{total_tracks}] Conversione, tag e organizzazione cartelle: {title}...', 'progress': progress})}\n\n"
+                        p_tag = json.dumps({'msg': f'[{idx}/{total_tracks}] Conversione, tag e organizzazione cartelle: {title}...', 'progress': progress})
+                        yield f"data: {p_tag}\n\n"
                         try:
                             final_file = process_and_tag_audio(
                                 mp3_file_path=downloaded_mp3_path,
@@ -130,13 +141,16 @@ def stream_download():
                             print(f"[DEBUG APP] Elaborazione e salvataggio completati: {final_file}", flush=True)
                         except Exception as tag_error:
                             print(f"[ERROR APP] Tagging/Organizzazione falliti su [{title}]: {tag_error}", flush=True)
-                            yield f"data: {json.dumps({'msg': f'[{idx}/{total_tracks}] Errore tagging {title}: {str(tag_error)}', 'progress': progress})}\n\n"
+                            p_err_tag = json.dumps({'msg': f'[{idx}/{total_tracks}] Errore tagging {title}: {str(tag_error)}', 'progress': progress})
+                            yield f"data: {p_err_tag}\n\n"
                     else:
                         print(f"[WARNING APP] album_id non presente (valore: '{album_id}'). Salto tagging e conversione.", flush=True)
-                        yield f"data: {json.dumps({'msg': f'[{idx}/{total_tracks}] Tagging saltato (album_id mancante)', 'progress': progress})}\n\n"
+                        p_no_id = json.dumps({'msg': f'[{idx}/{total_tracks}] Tagging saltato (album_id mancante)', 'progress': progress})
+                        yield f"data: {p_no_id}\n\n"
             except Exception as e:
                 print(f"[ERROR APP] Download fallito [{title}]: {e}", flush=True)
-                yield f"data: {json.dumps({'msg': f'Errore su {title}: {str(e)}', 'progress': progress})}\n\n"
+                p_err_dl = json.dumps({'msg': f'Errore su {title}: {str(e)}', 'progress': progress})
+                yield f"data: {p_err_dl}\n\n"
                 
         try:
             if os.path.exists(temp_dir) and not os.listdir(temp_dir):
@@ -144,7 +158,8 @@ def stream_download():
         except Exception:
             pass
 
-        yield f"data: {json.dumps({'msg': 'Download e organizzazione completati con successo!', 'progress': 100, 'completed': True})}\n\n"
+        p_end = json.dumps({'msg': 'Download e organizzazione completati con successo!', 'progress': 100, 'completed': True})
+        yield f"data: {p_end}\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 

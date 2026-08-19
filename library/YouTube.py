@@ -50,15 +50,18 @@ def search_videos(query, n=5):
             results = []
             for entry in info.get('entries', []) if info else []:
                 if entry:
+                    v_id = entry.get('id')
+                    v_url = f"https://www.youtube.com/watch?v={v_id}"
                     results.append({
-                        'id': entry.get('id'),
+                        'id': v_id,
                         'title': entry.get('title'),
-                        'url': f"https://www.youtube.com/watch?v={entry.get('id')}",
+                        'url': v_url,
                         'duration_sec': entry.get('duration')
                     })
             return results
         except Exception as e:
-            print(f"[Errore ricerca YouTube]: {e}", flush=True)
+            err_msg = f"[Errore ricerca YouTube]: {e}"
+            print(err_msg, flush=True)
             return []
 
 
@@ -78,7 +81,8 @@ def search_by_id(video_id):
                 'views': info.get('view_count')
             }
         except Exception as e:
-            print(f"[Errore lettura dettagli video {video_id}]: {e}", flush=True)
+            err_msg = f"[Errore lettura dettagli video {video_id}]: {e}"
+            print(err_msg, flush=True)
             return None
 
 
@@ -96,5 +100,6 @@ def download_by_id(video_id, output_folder="./downloads"):
         mp3_path = os.path.splitext(filename)[0] + ".mp3"
         
         abs_path = os.path.abspath(mp3_path)
-        print(f"[DEBUG YOUTUBE] MP3 scaricato in: {abs_path}", flush=True)
+        log_msg = f"[DEBUG YOUTUBE] MP3 scaricato in: {abs_path}"
+        print(log_msg, flush=True)
         return abs_path
