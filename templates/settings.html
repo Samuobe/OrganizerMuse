@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impostazioni</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-color: #1a1a1a;
+            --accent-color: #0066cc;
+            --accent-hover: #0052a3;
+            --border-color: #e0e4e8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            width: 100%;
+            max-width: 420px;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 24px;
+            text-align: center;
+            color: var(--text-color);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 1rem;
+            border: 1.5px solid var(--border-color);
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            background-color: #fafafa;
+            color: var(--text-color);
+        }
+
+        input[type="text"]:focus, select:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15);
+            background-color: #ffffff;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #ffffff;
+            background-color: var(--accent-color);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            margin-top: 10px;
+        }
+
+        .btn-submit:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-submit:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Impostazioni</h1>
+        <form method="GET" action="/save_settings">
+            <div class="form-group">
+                <label for="DownloadPath">Percorso di download</label>
+                <input 
+                    type="text" 
+                    id="DownloadPath" 
+                    name="DownloadPath" 
+                    value="{{ download_path }}"
+                    placeholder="./downloads"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="OutputFormat">Formato Audio</label>
+                <select id="OutputFormat" name="OutputFormat">
+                    <option value="opus" {% if output_format == 'opus' %}selected{% endif %}>OPUS</option>
+                    <option value="mp3" {% if output_format == 'mp3' %}selected{% endif %}>MP3</option>
+                    <option value="flac" {% if output_format == 'flac' %}selected{% endif %}>FLAC (Lossless)</option>
+                    <option value="m4a" {% if output_format == 'm4a' %}selected{% endif %}>M4A / AAC</option>
+                    <option value="ogg" {% if output_format == 'ogg' %}selected{% endif %}>OGG Vorbis</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="Bitrate">Bitrate (Ignorato per FLAC)</label>
+                <select id="Bitrate" name="Bitrate">
+                    <option value="320k" {% if bitrate == '320k' %}selected{% endif %}>320 kbps (Massima qualità)</option>
+                    <option value="256k" {% if bitrate == '256k' %}selected{% endif %}>256 kbps (Alta qualità)</option>
+                    <option value="192k" {% if bitrate == '192k' %}selected{% endif %}>192 kbps (Media qualità)</option>
+                    <option value="128k" {% if bitrate == '128k' %}selected{% endif %}>128 kbps (Standard)</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="btn-submit">Salva</button>
+        </form>
+    </div>
+
+</body>
+</html>
