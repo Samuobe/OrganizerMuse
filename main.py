@@ -1,16 +1,79 @@
 import json
 import re
 import tempfile
+import threading
+import queue
+import time
+import configparser
+import os
 from flask import Flask, request, render_template, Response, stream_with_context, redirect, url_for
 from library.MusicBrainz import search_album as MB_search_album
 from library.MusicBrainz import serch_id as MB_serch_id
 from library.MusicBrainz import process_and_tag_audio
 from library.YouTube import search_videos, download_by_id
-import time
-import configparser
-import os
 
 app = Flask(__name__)
+
+
+def worker_download_process(items, album_id, artist_name, msg_queue):
+    total_tracks = len(items)
+    if total_tracks == 0:
+        msg_queue.put({'msg': 'Nessuna traccia selezionata.', 'error': True, 'completed': True})
+        return
+
+    msg_queue.put({'msg': 'Avvio download e elaborazione album...', 'progress': 0})
+
+    config = configparser.ConfigParser()
+    config.read('config.conf')
+    download_path = config.get("PREFERENCES", "DownloadPath", fallback="./downloads")
+    
+    temp_dir = os.path.join(download_path, "_temp")
+    os.makedirs(temp_dir, exist_ok=True)
+
+    for idx, item in enumerate(items, 1):
+        title = item.get("title")
+        video_id = item.get("video_id")
+        progress = int(((idx - 1) / total_tracks) * 100)
+
+        if not video_id:
+            msg_queue.put({'msg': f'[{idx}/{total_tracks}] Saltata: {title} (ID mancante)', 'progress': progress})
+            continue
+
+        msg_queue.put({'msg': f'[{idx}/{total_tracks}] Scaricamento: {title}...', 'progress': progress})
+        try:
+            downloaded_mp3_path = download_by_id(video_id, output_folder=temp_dir)
+            print(f"[DEBUG APP] Percorso restituito da download_by_id: {downloaded_mp3_path}", flush=True)
+
+            if downloaded_mp3_path and os.path.exists(downloaded_mp3_path):
+                if album_id:
+                    msg_queue.put({'msg': f'[{idx}/{total_tracks}] Conversione, tag e organizzazione cartelle: {title}...', 'progress': progress})
+                    try:
+                        final_file = process_and_tag_audio(
+                            mp3_file_path=downloaded_mp3_path,
+                            track_title=title,
+                            artist_name=artist_name,
+                            release_id=album_id,
+                            config_path="config.conf"
+                        )
+                        print(f"[DEBUG APP] Elaborazione e salvataggio completati: {final_file}", flush=True)
+                    except Exception as tag_error:
+                        print(f"[ERROR APP] Tagging/Organizzazione falliti su [{title}]: {tag_error}", flush=True)
+                        msg_queue.put({'msg': f'[{idx}/{total_tracks}] Errore tagging {title}: {str(tag_error)}', 'progress': progress})
+                else:
+                    print(f"[WARNING APP] album_id non presente (valore: '{album_id}'). Salto tagging e conversione.", flush=True)
+                    msg_queue.put({'msg': f'[{idx}/{total_tracks}] Tagging saltato (album_id mancante)', 'progress': progress})
+        except Exception as e:
+            print(f"[ERROR APP] Download fallito [{title}]: {e}", flush=True)
+            msg_queue.put({'msg': f'Errore su {title}: {str(e)}', 'progress': progress})
+            
+    try:
+        if os.path.exists(temp_dir) and not os.listdir(temp_dir):
+            os.rmdir(temp_dir)
+    except Exception:
+        pass
+
+    msg_queue.put({'msg': 'Download e organizzazione completati con successo!', 'progress': 100, 'completed': True})
+
 
 @app.route('/')
 def index():
@@ -93,73 +156,29 @@ def stream_download():
     album_id = payload.get("album_id")
     artist_name = payload.get("artist_name", "")
 
+    msg_queue = queue.Queue()
+
+    t = threading.Thread(
+        target=worker_download_process,
+        args=(items, album_id, artist_name, msg_queue),
+        daemon=True
+    )
+    t.start()
+
     def generate():
-        total_tracks = len(items)
-        if total_tracks == 0:
-            payload_empty = json.dumps({'msg': 'Nessuna traccia selezionata.', 'error': True})
-            yield f"data: {payload_empty}\n\n"
-            return
-
-        payload_start = json.dumps({'msg': 'Avvio download e elaborazione album...', 'progress': 0})
-        yield f"data: {payload_start}\n\n"
-
-        config = configparser.ConfigParser()
-        config.read('config.conf')
-        download_path = config.get("PREFERENCES", "DownloadPath", fallback="./downloads")
-        
-        temp_dir = os.path.join(download_path, "_temp")
-        os.makedirs(temp_dir, exist_ok=True)
-
-        for idx, item in enumerate(items, 1):
-            title = item.get("title")
-            video_id = item.get("video_id")
-            progress = int(((idx - 1) / total_tracks) * 100)
-
-            if not video_id:
-                p_sk = json.dumps({'msg': f'[{idx}/{total_tracks}] Saltata: {title} (ID mancante)', 'progress': progress})
-                yield f"data: {p_sk}\n\n"
-                continue
-
-            p_dl = json.dumps({'msg': f'[{idx}/{total_tracks}] Scaricamento: {title}...', 'progress': progress})
-            yield f"data: {p_dl}\n\n"
+        """Legge dalla coda e trasmette all'HTML finché la connessione è attiva."""
+        while True:
             try:
-                downloaded_mp3_path = download_by_id(video_id, output_folder=temp_dir)
-                print(f"[DEBUG APP] Percorso restituito da download_by_id: {downloaded_mp3_path}", flush=True)
+                data_item = msg_queue.get(timeout=1.0)
+                payload_str = json.dumps(data_item)
+                yield f"data: {payload_str}\n\n"
 
-                if downloaded_mp3_path and os.path.exists(downloaded_mp3_path):
-                    if album_id:
-                        p_tag = json.dumps({'msg': f'[{idx}/{total_tracks}] Conversione, tag e organizzazione cartelle: {title}...', 'progress': progress})
-                        yield f"data: {p_tag}\n\n"
-                        try:
-                            final_file = process_and_tag_audio(
-                                mp3_file_path=downloaded_mp3_path,
-                                track_title=title,
-                                artist_name=artist_name,
-                                release_id=album_id,
-                                config_path="config.conf"
-                            )
-                            print(f"[DEBUG APP] Elaborazione e salvataggio completati: {final_file}", flush=True)
-                        except Exception as tag_error:
-                            print(f"[ERROR APP] Tagging/Organizzazione falliti su [{title}]: {tag_error}", flush=True)
-                            p_err_tag = json.dumps({'msg': f'[{idx}/{total_tracks}] Errore tagging {title}: {str(tag_error)}', 'progress': progress})
-                            yield f"data: {p_err_tag}\n\n"
-                    else:
-                        print(f"[WARNING APP] album_id non presente (valore: '{album_id}'). Salto tagging e conversione.", flush=True)
-                        p_no_id = json.dumps({'msg': f'[{idx}/{total_tracks}] Tagging saltato (album_id mancante)', 'progress': progress})
-                        yield f"data: {p_no_id}\n\n"
-            except Exception as e:
-                print(f"[ERROR APP] Download fallito [{title}]: {e}", flush=True)
-                p_err_dl = json.dumps({'msg': f'Errore su {title}: {str(e)}', 'progress': progress})
-                yield f"data: {p_err_dl}\n\n"
-                
-        try:
-            if os.path.exists(temp_dir) and not os.listdir(temp_dir):
-                os.rmdir(temp_dir)
-        except Exception:
-            pass
-
-        p_end = json.dumps({'msg': 'Download e organizzazione completati con successo!', 'progress': 100, 'completed': True})
-        yield f"data: {p_end}\n\n"
+                if data_item.get('completed'):
+                    break
+            except queue.Empty:
+                if not t.is_alive():
+                    break
+                yield ": keep-alive\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
@@ -179,6 +198,7 @@ def save_settings():
     download_path = request.args.get("DownloadPath")
     output_format = request.args.get("OutputFormat")
     bitrate = request.args.get("Bitrate")
+    port = request.args.get("Port")
 
     if download_path:
         config['PREFERENCES']['DownloadPath'] = download_path
@@ -186,6 +206,8 @@ def save_settings():
         config['PREFERENCES']['OutputFormat'] = output_format.lower()
     if bitrate:
         config['PREFERENCES']['Bitrate'] = bitrate.lower()
+    if port and port.isdigit():
+        config['PREFERENCES']['Port'] = port
 
     with open('config.conf', 'w') as configfile:
         config.write(configfile)
@@ -205,12 +227,14 @@ def settings():
     download_path = config.get("PREFERENCES", "DownloadPath", fallback="./downloads")
     output_format = config.get("PREFERENCES", "OutputFormat", fallback="opus")
     bitrate = config.get("PREFERENCES", "Bitrate", fallback="320k")
+    port = config.get("PREFERENCES", "Port", fallback="5090")
 
     return render_template(
         "settings.html", 
         download_path=download_path, 
         output_format=output_format,
-        bitrate=bitrate
+        bitrate=bitrate,
+        port=port
     )
 
 
@@ -219,7 +243,8 @@ if __name__ == '__main__':
         'PREFERENCES': {
             'DownloadPath': './downloads',
             'OutputFormat': 'opus',
-            'Bitrate': '320k'
+            'Bitrate': '320k',
+            'Port': '5090'
         }
     }
 
@@ -250,5 +275,8 @@ if __name__ == '__main__':
 
         return config
 
-    sync_config()
-    app.run(debug=True, host="0.0.0.0")
+    cfg = sync_config()
+    server_port = cfg.getint("PREFERENCES", "Port", fallback=5090)
+    
+    print(f"[SERVER] Avvio di Flask sulla porta: {server_port}", flush=True)
+    app.run(debug=True, host="0.0.0.0", port=server_port)
