@@ -27,7 +27,7 @@ def worker_download_process(items, album_id, artist_name, msg_queue):
     config.read('config.conf')
     download_path = config.get("PREFERENCES", "DownloadPath", fallback="./downloads")
     
-    temp_dir = os.path.join(download_path, "_temp")
+    temp_dir = os.path.join(download_path, ".OrganizerMuse_temp")
     os.makedirs(temp_dir, exist_ok=True)
 
     for idx, item in enumerate(items, 1):
